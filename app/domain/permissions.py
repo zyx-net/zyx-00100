@@ -44,6 +44,33 @@ class WaitlistMatchStatus(str, Enum):
     DUPLICATE_MATCH = "duplicate_match"
 
 
+class BulkImportBatchStatus(str, Enum):
+    DRAFT = "draft"
+    PRECHECKING = "prechecking"
+    PRECHECKED = "prechecked"
+    PRECHECK_FAILED = "precheck_failed"
+    CONFIRMING = "confirming"
+    CONFIRMED = "confirmed"
+    PARTIALLY_FAILED = "partially_failed"
+    CANCELLED = "cancelled"
+
+
+class BulkImportDraftStatus(str, Enum):
+    PENDING = "pending"
+    PASSED = "passed"
+    FAILED = "failed"
+    CREATED = "created"
+    CREATE_FAILED = "create_failed"
+    RETRYABLE = "retryable"
+
+
+class BulkImportPrecheckStatus(str, Enum):
+    PENDING = "pending"
+    PASSED = "passed"
+    ERROR = "error"
+    WARNING = "warning"
+
+
 class EventType(str, Enum):
     BOOKING_CREATED = "booking_created"
     BOOKING_APPROVED = "booking_approved"
@@ -81,6 +108,10 @@ class Permission(str, Enum):
     SUBMIT_WAITLIST = "submit_waitlist"
     MANAGE_WAITLIST = "manage_waitlist"
     VIEW_ALL_WAITLIST = "view_all_waitlist"
+    BULK_IMPORT_DRAFT = "bulk_import_draft"
+    BULK_IMPORT_CONFIRM = "bulk_import_confirm"
+    BULK_IMPORT_CANCEL = "bulk_import_cancel"
+    BULK_IMPORT_VIEW_ALL = "bulk_import_view_all"
 
 
 ROLE_PERMISSIONS = {
@@ -92,6 +123,7 @@ ROLE_PERMISSIONS = {
         Permission.EXPORT_SCHEDULE,
         Permission.RESCHEDULE_BOOKING,
         Permission.SUBMIT_WAITLIST,
+        Permission.BULK_IMPORT_DRAFT,
     },
     UserRole.TEAM_ADMIN: {
         Permission.CREATE_BOOKING,
@@ -108,6 +140,9 @@ ROLE_PERMISSIONS = {
         Permission.SUBMIT_WAITLIST,
         Permission.MANAGE_WAITLIST,
         Permission.VIEW_ALL_WAITLIST,
+        Permission.BULK_IMPORT_DRAFT,
+        Permission.BULK_IMPORT_CONFIRM,
+        Permission.BULK_IMPORT_CANCEL,
     },
     UserRole.RECEPTIONIST: {
         Permission.CREATE_BOOKING,
@@ -124,6 +159,10 @@ ROLE_PERMISSIONS = {
         Permission.SUBMIT_WAITLIST,
         Permission.MANAGE_WAITLIST,
         Permission.VIEW_ALL_WAITLIST,
+        Permission.BULK_IMPORT_DRAFT,
+        Permission.BULK_IMPORT_CONFIRM,
+        Permission.BULK_IMPORT_CANCEL,
+        Permission.BULK_IMPORT_VIEW_ALL,
     },
     UserRole.SYSTEM_ADMIN: {
         Permission.CREATE_BOOKING,
@@ -142,6 +181,10 @@ ROLE_PERMISSIONS = {
         Permission.SUBMIT_WAITLIST,
         Permission.MANAGE_WAITLIST,
         Permission.VIEW_ALL_WAITLIST,
+        Permission.BULK_IMPORT_DRAFT,
+        Permission.BULK_IMPORT_CONFIRM,
+        Permission.BULK_IMPORT_CANCEL,
+        Permission.BULK_IMPORT_VIEW_ALL,
     },
 }
 

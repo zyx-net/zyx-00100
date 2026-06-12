@@ -178,6 +178,93 @@ class WaitlistActionLog(Base):
     created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
 
 
+class BulkImportBatch(Base):
+    __tablename__ = "bulk_import_batches"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    batch_id = Column(String(128), nullable=False, unique=True, index=True)
+    submitter_id = Column(String(64), nullable=False, index=True)
+    submitter_name = Column(String(128), nullable=False)
+    submitter_role = Column(String(32), nullable=False)
+
+    source_format = Column(String(16), nullable=False)
+    source_filename = Column(String(256), nullable=True)
+    total_count = Column(Integer, nullable=False, default=0)
+
+    status = Column(String(32), nullable=False, default="draft", index=True)
+    precheck_passed = Column(Boolean, nullable=False, default=False)
+    precheck_at = Column(DateTime, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmed_by_id = Column(String(64), nullable=True)
+    confirmed_by_name = Column(String(128), nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    cancelled_by_id = Column(String(64), nullable=True)
+    cancelled_by_name = Column(String(128), nullable=True)
+
+    success_count = Column(Integer, nullable=False, default=0)
+    failed_count = Column(Integer, nullable=False, default=0)
+
+    rule_version = Column(String(32), nullable=False, default="v1.0.0")
+    created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
+    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class BulkImportDraft(Base):
+    __tablename__ = "bulk_import_drafts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    batch_id = Column(String(128), nullable=False, index=True)
+    draft_index = Column(Integer, nullable=False)
+    row_number = Column(Integer, nullable=False)
+
+    room_id = Column(String(64), nullable=True)
+    owner_id = Column(String(64), nullable=True)
+    owner_name = Column(String(128), nullable=True)
+    team_id = Column(String(64), nullable=True)
+    title = Column(String(256), nullable=True)
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
+    attendees = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
+
+    raw_row_data = Column(Text, nullable=True)
+
+    precheck_status = Column(String(32), nullable=False, default="pending", index=True)
+    precheck_errors = Column(Text, nullable=True)
+    precheck_warnings = Column(Text, nullable=True)
+
+    result_status = Column(String(32), nullable=False, default="pending", index=True)
+    result_booking_id = Column(String(128), nullable=True)
+    result_error = Column(Text, nullable=True)
+    retryable = Column(Boolean, nullable=False, default=False)
+
+    rule_version = Column(String(32), nullable=False, default="v1.0.0")
+    created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
+    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("ux_batch_draft_index", "batch_id", "draft_index", unique=True),
+    )
+
+
+class BulkImportOperationLog(Base):
+    __tablename__ = "bulk_import_operation_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    log_id = Column(String(128), nullable=False, unique=True, index=True)
+    batch_id = Column(String(128), nullable=False, index=True)
+    operation = Column(String(64), nullable=False)
+    old_status = Column(String(32), nullable=True)
+    new_status = Column(String(32), nullable=True)
+    details = Column(Text, nullable=True)
+
+    actor_id = Column(String(64), nullable=True)
+    actor_name = Column(String(128), nullable=True)
+    actor_role = Column(String(32), nullable=True)
+    rule_version = Column(String(32), nullable=False, default="v1.0.0")
+    created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
+
+
 def get_db():
     db = SessionLocal()
     try:

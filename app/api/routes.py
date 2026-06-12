@@ -20,6 +20,7 @@ from ..services.queries import QueryService
 from ..services.arbitration import ArbitrationService
 from ..services.reschedule_service import RescheduleApprovalService
 from ..services.waitlist_service import WaitlistService
+from ..services.bulk_import_service import BulkImportService
 from ..models import schemas as S
 
 router = APIRouter(prefix="/api/v1", tags=["会议室预订"])
@@ -680,6 +681,182 @@ def expire_stale_waitlists(
         "success": True,
         "expired_count": count,
         "rule_version": settings.rule_version,
+    }
+
+
+# ---------- 批量导入接口 ----------
+
+@router.post("/bulk-import/upload", response_model=S.BulkImportBatchResponse)
+def bulk_import_upload(
+    req: S.BulkImportUploadRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = BulkImportService(db)
+    try:
+        result = svc.upload_drafts(
+            format=req.format,
+            rows=req.rows,
+            csv_content=req.csv_content,
+            filename=req.filename,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+        )
+    except DomainError as e:
+        return _error_resp(e, 400)
+    return result
+
+
+@router.post("/bulk-import/{batch_id}/precheck", response_model=S.BulkImportPrecheckResponse)
+def bulk_import_precheck(
+    batch_id: str,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = BulkImportService(db)
+    try:
+        batch = svc.run_precheck(
+            batch_id=batch_id,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+        )
+    except DomainError as e:
+        return _error_resp(e, 403 if e.code == "PERMISSION_DENIED" else 404 if e.code == "BATCH_NOT_FOUND" else 400)
+    error_count = len([d for d in batch.get("drafts", []) if d["precheck_status"] == "error"])
+    warning_count = len([d for d in batch.get("drafts", []) if d["precheck_status"] == "warning"])
+    passed_count = len([d for d in batch.get("drafts", []) if d["precheck_status"] in ("passed", "warning")])
+    return {
+        "success": True,
+        "batch_id": batch_id,
+        "precheck_passed": batch["precheck_passed"],
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "passed_count": passed_count,
+        "summary": batch.get("precheck_summary", {}),
+        "drafts": batch.get("drafts", []),
+        "rule_version": settings.rule_version,
+    }
+
+
+@router.post("/bulk-import/{batch_id}/confirm", response_model=S.BulkImportConfirmResponse)
+def bulk_import_confirm(
+    batch_id: str,
+    req: S.BulkImportConfirmRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = BulkImportService(db)
+    try:
+        result = svc.confirm_batch(
+            batch_id=batch_id,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+            note=req.note,
+        )
+    except DomainError as e:
+        status = 403
+        if e.code == "BATCH_NOT_FOUND":
+            status = 404
+        elif e.code in ("PRECHECK_REQUIRED", "INVALID_STATUS", "ALREADY_PROCESSED"):
+            status = 400
+        return _error_resp(e, status)
+    return result
+
+
+@router.post("/bulk-import/{batch_id}/cancel", response_model=S.BulkImportBatchResponse)
+def bulk_import_cancel(
+    batch_id: str,
+    req: S.BulkImportCancelRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = BulkImportService(db)
+    try:
+        result = svc.cancel_batch(
+            batch_id=batch_id,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+            reason=req.reason,
+        )
+    except DomainError as e:
+        status = 403
+        if e.code == "BATCH_NOT_FOUND":
+            status = 404
+        elif e.code == "INVALID_STATUS":
+            status = 400
+        return _error_resp(e, status)
+    return result
+
+
+@router.get("/bulk-import/{batch_id}", response_model=S.BulkImportBatchResponse)
+def bulk_import_get(
+    batch_id: str,
+    include_drafts: bool = Query(True, description="是否包含草稿详情"),
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = BulkImportService(db)
+    try:
+        result = svc.get_batch(
+            batch_id=batch_id,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            include_drafts=include_drafts,
+        )
+    except DomainError as e:
+        status = 403 if e.code == "PERMISSION_DENIED" else 404
+        return _error_resp(e, status)
+    return result
+
+
+@router.get("/bulk-import", response_model=S.BulkImportBatchListResponse)
+def bulk_import_list(
+    status: Optional[str] = Query(None, description="状态过滤，逗号分隔"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = BulkImportService(db)
+    return svc.list_batches(
+        actor_id=actor["actor_id"],
+        actor_role=actor["actor_role"],
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/bulk-import/{batch_id}/logs", response_model=S.EventQueryResponse)
+def bulk_import_logs(
+    batch_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = BulkImportService(db)
+    try:
+        result = svc.list_operation_logs(
+            batch_id=batch_id,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            limit=limit,
+            offset=offset,
+        )
+    except DomainError as e:
+        status = 403 if e.code == "PERMISSION_DENIED" else 404
+        return _error_resp(e, status)
+    return {
+        "total": result["total"],
+        "limit": result["limit"],
+        "offset": result["offset"],
+        "rule_version": settings.rule_version,
+        "items": result["items"],
     }
 
 
