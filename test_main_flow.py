@@ -199,6 +199,78 @@ def step_07(db, ctx):
     print(f"      导出 {csv_result['row_count']} 行，rule_version={csv_result['rule_version']}")
 
 
+@t("08 回归-成员改自己的预订成功（原 UnboundLocalError 场景：member 无 RESCHEDULE_BOOKING 权限走 fallback）")
+def step_08(db, ctx):
+    handler = CommandHandler(db)
+    # 创建专属临时 booking 给张三改期（不依赖 bk1 的 checked_in 状态）
+    t_start = (datetime.now(TZ) + timedelta(days=1)).replace(hour=15, minute=0, second=0, microsecond=0)
+    t_end = t_start + timedelta(hours=1)
+    r = handler.create_booking(
+        CreateBookingCmd(
+            room_id="room-102", owner_id="u-zhangsan", owner_name="张三",
+            team_id="team-a", title="改期测试-成员自改",
+            start_time=t_start, end_time=t_end,
+        ),
+        "u-zhangsan", UserRole.MEMBER, "张三",
+    )
+    tmp_id = r["booking"]["booking_id"]
+    tmp_ver = r["booking"]["version"]
+    # 张三（member）改自己的：member 没有 RESCHEDULE_BOOKING，会触发 agg.owner_id 判断分支
+    new_start = t_start + timedelta(hours=1)
+    new_end = new_start + timedelta(hours=1)
+    cmd = RescheduleBookingCmd(
+        booking_id=tmp_id,
+        rescheduler_id="u-zhangsan",
+        rescheduler_name="张三",
+        new_start_time=new_start,
+        new_end_time=new_end,
+        reason="成员改自己的预订",
+        expected_version=tmp_ver,
+    )
+    result = handler.reschedule_booking(cmd, "u-zhangsan", UserRole.MEMBER, "张三")
+    b = result["booking"]
+    assert b["status"] == "approved"
+    assert b["version"] == tmp_ver + 1
+    assert b["start_time"] == new_start.isoformat()
+    assert len(b["reschedule_history"]) == 1
+    print(f"      成员自改: {tmp_id} v{tmp_ver}→v{b['version']} 时段={new_start.strftime('%H:%M')}-{new_end.strftime('%H:%M')}")
+
+
+@t("09 回归-成员赵六改张三的预订被拒绝 PERMISSION_DENIED")
+def step_09(db, ctx):
+    handler = CommandHandler(db)
+    # 创建张三的专属临时 booking
+    t_start = (datetime.now(TZ) + timedelta(days=1)).replace(hour=17, minute=0, second=0, microsecond=0)
+    t_end = t_start + timedelta(hours=1)
+    r = handler.create_booking(
+        CreateBookingCmd(
+            room_id="room-102", owner_id="u-zhangsan", owner_name="张三",
+            team_id="team-a", title="改期测试-他人改",
+            start_time=t_start, end_time=t_end,
+        ),
+        "u-zhangsan", UserRole.MEMBER, "张三",
+    )
+    tmp_id = r["booking"]["booking_id"]
+    tmp_ver = r["booking"]["version"]
+    # 赵六（member，非 owner）改张三的 → 被拒
+    new_start = t_start + timedelta(hours=2)
+    new_end = new_start + timedelta(hours=1)
+    cmd = RescheduleBookingCmd(
+        booking_id=tmp_id,
+        rescheduler_id="u-zhaoliu",
+        rescheduler_name="赵六",
+        new_start_time=new_start,
+        new_end_time=new_end,
+        expected_version=tmp_ver,
+    )
+    try:
+        handler.reschedule_booking(cmd, "u-zhaoliu", UserRole.MEMBER, "赵六")
+        raise AssertionError("应抛出无权改期")
+    except DomainError as e:
+        assert e.code == "PERMISSION_DENIED", f"期待 PERMISSION_DENIED，got {e.code}: {e.message}"
+        print(f"      成员改他人: {e.code}")
+
+
 @t("10 错误场景-1 重叠预订返回 BOOKING_CONFLICT")
 def step_10(db, ctx):
     handler = CommandHandler(db)
@@ -224,11 +296,11 @@ def step_10(db, ctx):
 @t("11 错误场景-2 过期签到返回 CHECK_IN_GRACE_EXPIRED")
 def step_11(db, ctx):
     handler = CommandHandler(db)
-    start = datetime.now(TZ) + timedelta(days=1)
+    start = datetime.now(TZ) + timedelta(days=2)
     start = start.replace(hour=16, minute=0)
     end = start + timedelta(hours=1)
     create_cmd = CreateBookingCmd(
-        room_id="room-102",
+        room_id="room-202",
         owner_id="u-zhaoliu",
         owner_name="赵六",
         title="待过期签到",
@@ -289,6 +361,44 @@ def step_13(db, ctx):
     except DomainError as e:
         assert e.code == "PERMISSION_DENIED"
         assert "系统管理员" in e.message
+
+
+@t("14 回归-改期传入结束早于开始返回 INVALID_TIME_RANGE，不产生 UnboundLocalError")
+def step_14(db, ctx):
+    handler = CommandHandler(db)
+    # 先创建张三的临时 booking
+    t_start = (datetime.now(TZ) + timedelta(days=1)).replace(hour=19, minute=0, second=0, microsecond=0)
+    t_end = t_start + timedelta(hours=1)
+    r = handler.create_booking(
+        CreateBookingCmd(
+            room_id="room-102", owner_id="u-zhangsan", owner_name="张三",
+            team_id="team-a", title="改期非法时间测试",
+            start_time=t_start, end_time=t_end,
+        ),
+        "u-zhangsan", UserRole.MEMBER, "张三",
+    )
+    tmp_id = r["booking"]["booking_id"]
+    tmp_ver = r["booking"]["version"]
+    # 传入 end < start，先通过权限/所有者校验 → 非法时间校验
+    new_start = (datetime.now(TZ) + timedelta(days=1)).replace(hour=20, minute=0, second=0, microsecond=0)
+    new_end = new_start - timedelta(hours=1)
+    cmd = RescheduleBookingCmd(
+        booking_id=tmp_id,
+        rescheduler_id="u-zhangsan",
+        rescheduler_name="张三",
+        new_start_time=new_start,
+        new_end_time=new_end,
+        expected_version=tmp_ver,
+    )
+    try:
+        handler.reschedule_booking(cmd, "u-zhangsan", UserRole.MEMBER, "张三")
+        raise AssertionError("应抛出非法时间")
+    except DomainError as e:
+        assert e.code == "INVALID_TIME_RANGE", f"期待 INVALID_TIME_RANGE，got {e.code}"
+    # 关键验证：聚合没被破坏，版本号不变
+    agg = EventStoreService(db).load_aggregate(tmp_id)
+    assert agg.version == tmp_ver, f"非法改期不应写入事件，版本不变：期望 {tmp_ver} 实际 {agg.version}"
+    print(f"      非法时间: {e.code if 'e' in locals() else 'INVALID_TIME_RANGE'} 版本未破坏")
 
 
 @t("20 一致性-1 事件重放得到当前日程 - 排序稳定，版本号递增")
@@ -373,10 +483,13 @@ def main():
         (step_05, (db, ctx)),
         (step_06, (db, ctx)),
         (step_07, (db, ctx)),
+        (step_08, (db, ctx)),
+        (step_09, (db, ctx)),
         (step_10, (db, ctx)),
         (step_11, (db, ctx)),
         (step_12, (db, ctx)),
         (step_13, (db, ctx)),
+        (step_14, (db, ctx)),
         (step_20, (db, ctx)),
         (step_21, (db, ctx)),
         (step_22, (db, ctx)),

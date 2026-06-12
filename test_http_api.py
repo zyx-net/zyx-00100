@@ -99,8 +99,59 @@ code, d = req("POST", f"/api/v1/bookings/{bk2_id}/approve", {
 }, headers=ACTOR_RECEPTION)
 assert code == 200 and d["success"], f"approve failed {code}: {d}"
 print(f"[OK 200] POST approve -> status={d['booking']['status']} ver={d['booking']['version']}")
+bk2_ver = d["booking"]["version"]
 
-# 7. Check-in
+# 7. REGRESSION: Member reschedules OWN booking (triggers fallback permission path) -> must NOT 500
+# Create dedicated booking for Zhang San (member) then have him reschedule
+resched_start = (datetime.now(TZ) + timedelta(days=3)).replace(hour=10, minute=0, second=0, microsecond=0)
+resched_end = resched_start + timedelta(hours=1)
+code, d = req("POST", "/api/v1/bookings", {
+    "room_id": "room-102",
+    "owner_id": "u-zhangsan",
+    "owner_name": "Zhang San",
+    "team_id": "team-a",
+    "title": "Reschedule test (HTTP) - own",
+    "start_time": resched_start.isoformat(),
+    "end_time": resched_end.isoformat(),
+}, headers=ACTOR_ZHANGSAN)
+assert code == 200 and d["success"], f"create for reschedule failed {code}: {d}"
+rs_id = d["booking"]["booking_id"]
+rs_ver = d["booking"]["version"]
+rs_new_start = resched_start + timedelta(hours=2)
+rs_new_end = rs_new_start + timedelta(hours=1)
+code, d = req("POST", f"/api/v1/bookings/{rs_id}/reschedule", {
+    "booking_id": rs_id,
+    "rescheduler_id": "u-zhangsan",
+    "rescheduler_name": "Zhang San",
+    "new_start_time": rs_new_start.isoformat(),
+    "new_end_time": rs_new_end.isoformat(),
+    "reason": "HTTP reschedule member own",
+    "expected_version": rs_ver,
+}, headers=ACTOR_ZHANGSAN)
+assert code != 500, f"REGRESSION 500: member rescheduling own booking! got {code}: {d}"
+assert code == 200 and d["success"], f"member reschedule own failed {code}: {d}"
+assert d["booking"]["status"] == "approved"
+assert d["booking"]["version"] == rs_ver + 1
+assert d["booking"]["start_time"] == rs_new_start.isoformat()
+print(f"[OK 200] POST reschedule (member own) -> ver {rs_ver}->{d['booking']['version']} NO 500")
+
+# 8. REGRESSION: Member Zhao Liu tries to reschedule Zhang San's booking -> PERMISSION_DENIED
+rs2_id = rs_id
+rs2_ver = d["booking"]["version"]
+code, d = req("POST", f"/api/v1/bookings/{rs2_id}/reschedule", {
+    "booking_id": rs2_id,
+    "rescheduler_id": "u-zhaoliu",
+    "rescheduler_name": "Zhao Liu",
+    "new_start_time": (rs_new_start + timedelta(hours=3)).isoformat(),
+    "new_end_time": (rs_new_end + timedelta(hours=3)).isoformat(),
+    "expected_version": rs2_ver,
+}, headers=ACTOR_ZHAOLIU)
+assert code != 500, f"500 on permission check! got {code}: {d}"
+assert code == 400 or code == 403, f"expected permission denied, got {code}: {d}"
+assert d["error"]["code"] == "PERMISSION_DENIED"
+print(f"[OK {code}] POST reschedule (member other) -> PERMISSION_DENIED: {d['error']['code']}")
+
+# 9. Check-in
 check_time = start + timedelta(minutes=5)
 code, d = req("POST", f"/api/v1/bookings/{bk_id}/check-in", {
     "booking_id": bk_id,
@@ -113,7 +164,7 @@ assert code == 200 and d["success"], f"checkin failed {code}: {d}"
 print(f"[OK 200] POST check-in -> status={d['booking']['status']} ver={d['booking']['version']}")
 bk_ver = d["booking"]["version"]
 
-# 8. Conflict
+# 10. Conflict
 code, d = req("POST", "/api/v1/bookings", {
     "room_id": "room-101",
     "owner_id": "u-zhaoliu",
@@ -126,7 +177,7 @@ assert code == 409, f"expected 409 conflict, got {code}: {d}"
 assert d["error"]["code"] == "BOOKING_CONFLICT"
 print(f"[OK 409] Overlap BOOKING_CONFLICT -> conflicts={len(d['error']['details']['conflicts'])}")
 
-# 9. Unauthorized arbitration
+# 11. Unauthorized arbitration
 code, d = req("POST", f"/api/v1/bookings/{bk_id}/arbitrate", {
     "booking_id": bk_id,
     "arbitrator_id": "u-wangwu",
@@ -139,17 +190,17 @@ assert code == 403, f"expected 403 permission denied, got {code}: {d}"
 assert d["error"]["code"] == "PERMISSION_DENIED"
 print(f"[OK 403] Unauthorized arbitration PERMISSION_DENIED")
 
-# 10. Export
+# 12. Export
 code, d = req("GET", "/api/v1/export?format=json")
 assert code == 200
 print(f"[OK 200] /api/v1/export json -> rows={d['row_count']} rule={d['rule_version']}")
 
-# 11. Events query
+# 13. Events query
 code, d = req("GET", f"/api/v1/events?stream_id={bk_id}")
 assert code == 200
 print(f"[OK 200] /api/v1/events stream={bk_id} -> events={d['total']} rule={d['rule_version']}")
 
-# 12. Conflict analysis (has conflict)
+# 14. Conflict analysis (has conflict) - regression from round 2, must have rule_version
 qs = urllib.parse.urlencode({
     "room_id": "room-101",
     "start": start.isoformat(),
@@ -163,7 +214,7 @@ assert d["incumbent"] is not None
 assert isinstance(d["affected"], list) and len(d["affected"]) >= 1
 print(f"[OK 200] conflicts/analyze (conflict) -> has_conflict=True rule={d['rule_version']} rec={d['recommendation']}")
 
-# 14. REGRESSION: Conflict analysis (NO conflict / free window) - must NOT 500
+# 15. REGRESSION (round 2): Conflict analysis (NO conflict / free window) - must NOT 500
 free_start = (datetime.now(TZ) + timedelta(days=7)).replace(hour=8, minute=0, second=0, microsecond=0)
 free_end = free_start + timedelta(hours=1)
 qs_free = urllib.parse.urlencode({
@@ -171,28 +222,28 @@ qs_free = urllib.parse.urlencode({
     "start": free_start.isoformat(),
     "end": free_end.isoformat(),
 })
-code, d = req("GET", f"/api/v1/conflicts/analyze?{qs_free}")
-assert code != 500, f"REGRESSION: free window returned 500! got {code}: {d}"
-assert code == 200, f"free window analyze got {code}: {d}"
-assert d["has_conflict"] == False
-assert d["conflict_count"] == 0
-assert d["recommendation"] == "ALLOW"
-assert d["rule_version"] == "v1.0.0", f"rule_version missing or wrong: {d.get('rule_version')}"
-assert d["incumbent"] is None
-assert d["affected"] == []
-print(f"[OK 200] conflicts/analyze (FREE) -> has_conflict=False rule={d['rule_version']} rec={d['recommendation']} NO 500")
+code, d_free = req("GET", f"/api/v1/conflicts/analyze?{qs_free}")
+assert code != 500, f"REGRESSION: free window returned 500! got {code}: {d_free}"
+assert code == 200, f"free window analyze got {code}: {d_free}"
+assert d_free["has_conflict"] == False
+assert d_free["conflict_count"] == 0
+assert d_free["recommendation"] == "ALLOW"
+assert d_free["rule_version"] == "v1.0.0", f"rule_version missing or wrong: {d_free.get('rule_version')}"
+assert d_free["incumbent"] is None
+assert d_free["affected"] == []
+print(f"[OK 200] conflicts/analyze (FREE) -> has_conflict=False rule={d_free['rule_version']} rec={d_free['recommendation']} NO 500")
 
-# 15. rule_version consistency across endpoints
+# 16. rule_version consistency across endpoints (round 2 regression check)
 code_rooms, rooms_d = req("GET", "/api/v1/rooms")
 code_sched, sched_d = req("GET", "/api/v1/schedule")
 code_export, export_d = req("GET", "/api/v1/export?format=json")
 rv = rooms_d["rule_version"]
 assert sched_d["rule_version"] == rv
 assert export_d["rule_version"] == rv
-assert d["rule_version"] == rv
+assert d_free["rule_version"] == rv
 print(f"[OK] rule_version consistent across all endpoints: {rv}")
 
-# 16. Get single booking
+# 17. Get single booking
 code, d = req("GET", f"/api/v1/bookings/{bk_id}")
 assert code == 200
 print(f"[OK 200] GET booking -> status={d['booking']['status']} ver={d['booking']['version']}")

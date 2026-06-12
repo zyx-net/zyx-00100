@@ -211,13 +211,13 @@ class CommandHandler:
         return {"booking": new_agg.to_dict(), "events": [e.to_dict() for e in events]}
 
     def reschedule_booking(self, cmd: RescheduleBookingCmd, actor_id: str, actor_role: UserRole, actor_name: str) -> Dict[str, Any]:
-        if not has_permission(actor_role, Permission.RESCHEDULE_BOOKING):
-            if not (actor_id == agg.owner_id and has_permission(actor_role, Permission.CANCEL_BOOKING)):
-                raise DomainError("PERMISSION_DENIED", f"角色 {actor_role.value} 无改期权限")
-
         agg = self.store.load_aggregate(cmd.booking_id)
         if agg.version == 0:
             raise DomainError("BOOKING_NOT_FOUND", f"预订 {cmd.booking_id} 不存在")
+
+        if not has_permission(actor_role, Permission.RESCHEDULE_BOOKING):
+            if not (actor_id == agg.owner_id and has_permission(actor_role, Permission.CANCEL_BOOKING)):
+                raise DomainError("PERMISSION_DENIED", f"角色 {actor_role.value} 无改期权限")
 
         if not can_modify_booking(actor_role, agg.owner_id, actor_id, agg.team_id):
             raise DomainError("PERMISSION_DENIED", "无权修改他人预订")
