@@ -81,3 +81,39 @@ class BookingArbitratedData(BaseModel):
 class BookingCompletedData(BaseModel):
     booking_id: str
     completed_at: datetime
+
+
+class RescheduleRequestedData(BaseModel):
+    request_id: str
+    booking_id: str
+    requester_id: str
+    requester_name: str
+    old_start_time: datetime
+    old_end_time: datetime
+    old_room_id: str
+    new_start_time: datetime
+    new_end_time: datetime
+    new_room_id: str
+    reason: Optional[str] = None
+
+
+class RescheduleApprovedData(BaseModel):
+    request_id: str
+    booking_id: str
+    approver_id: str
+    approver_name: str
+    old_start_time: datetime
+    old_end_time: datetime
+    old_room_id: str
+    new_start_time: datetime
+    new_end_time: datetime
+    new_room_id: str
+    reason: Optional[str] = None
+
+
+class RescheduleRejectedData(BaseModel):
+    request_id: str
+    booking_id: str
+    approver_id: str
+    approver_name: str
+    reason: str

@@ -139,6 +139,77 @@ class ConflictAnalysisResponse(BaseModel):
     affected: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class SubmitRescheduleRequest(BaseModel):
+    booking_id: str
+    requester_id: str
+    requester_name: str
+    new_start_time: datetime
+    new_end_time: datetime
+    new_room_id: Optional[str] = None
+    reason: Optional[str] = None
+    expected_version: int
+
+
+class ApproveRescheduleRequest(BaseModel):
+    request_id: str
+    approver_id: str
+    approver_name: str
+    reason: Optional[str] = None
+    expected_version: int
+
+
+class RejectRescheduleRequest(BaseModel):
+    request_id: str
+    approver_id: str
+    approver_name: str
+    reason: str
+    expected_version: int
+
+
+class RescheduleRequestResponse(BaseModel):
+    request_id: str
+    booking_id: str
+    requester_id: str
+    requester_name: str
+    requester_role: str
+    old_start_time: Optional[datetime]
+    old_end_time: Optional[datetime]
+    old_room_id: str
+    new_start_time: Optional[datetime]
+    new_end_time: Optional[datetime]
+    new_room_id: str
+    reason: Optional[str]
+    status: str
+    approver_id: Optional[str]
+    approver_name: Optional[str]
+    approve_reason: Optional[str]
+    approved_at: Optional[datetime]
+    booking_version: int
+    rule_version: str
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+
+class RescheduleRequestListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    rule_version: str
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class RescheduleApprovalResponse(BaseModel):
+    success: bool = True
+    request: Optional[Dict[str, Any]] = None
+    booking: Optional[Dict[str, Any]] = None
+    events: List[Dict[str, Any]] = Field(default_factory=list)
+    rule_version: str
+    requires_approval: Optional[bool] = None
+    has_internal_conflicts: Optional[bool] = None
+    internal_conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    superseded_requests: List[str] = Field(default_factory=list)
+
+
 class SuggestionResponse(BaseModel):
     rule_version: str
     suggestions: List[Dict[str, Any]] = Field(default_factory=list)

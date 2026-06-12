@@ -82,3 +82,30 @@ class ArbitrateCmd(BaseModel):
 class CompleteBookingCmd(BaseModel):
     booking_id: str
     completed_at: Optional[datetime] = None
+
+
+class SubmitRescheduleRequestCmd(BaseModel):
+    booking_id: str
+    requester_id: str
+    requester_name: str
+    new_start_time: datetime
+    new_end_time: datetime
+    new_room_id: Optional[str] = None
+    reason: Optional[str] = None
+    expected_version: int
+
+
+class ApproveRescheduleRequestCmd(BaseModel):
+    request_id: str
+    approver_id: str
+    approver_name: str
+    reason: Optional[str] = None
+    expected_version: int
+
+
+class RejectRescheduleRequestCmd(BaseModel):
+    request_id: str
+    approver_id: str
+    approver_name: str
+    reason: str
+    expected_version: int

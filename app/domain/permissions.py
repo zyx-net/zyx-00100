@@ -20,6 +20,14 @@ class BookingStatus(str, Enum):
     ARBITRATED = "arbitrated"
 
 
+class RescheduleRequestStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"
+    CONFLICT = "conflict"
+
+
 class EventType(str, Enum):
     BOOKING_CREATED = "booking_created"
     BOOKING_APPROVED = "booking_approved"
@@ -30,6 +38,9 @@ class EventType(str, Enum):
     BOOKING_RELEASED = "booking_released"
     BOOKING_ARBITRATED = "booking_arbitrated"
     BOOKING_COMPLETED = "booking_completed"
+    RESCHEDULE_REQUESTED = "reschedule_requested"
+    RESCHEDULE_APPROVED = "reschedule_approved"
+    RESCHEDULE_REJECTED = "reschedule_rejected"
 
 
 class Permission(str, Enum):
@@ -44,6 +55,8 @@ class Permission(str, Enum):
     QUERY_EVENTS = "query_events"
     EXPORT_SCHEDULE = "export_schedule"
     MANAGE_ROOMS = "manage_rooms"
+    APPROVE_RESCHEDULE = "approve_reschedule"
+    REJECT_RESCHEDULE = "reject_reschedule"
 
 
 ROLE_PERMISSIONS = {
@@ -53,6 +66,7 @@ ROLE_PERMISSIONS = {
         Permission.CHECK_IN,
         Permission.QUERY_EVENTS,
         Permission.EXPORT_SCHEDULE,
+        Permission.RESCHEDULE_BOOKING,
     },
     UserRole.TEAM_ADMIN: {
         Permission.CREATE_BOOKING,
@@ -64,6 +78,8 @@ ROLE_PERMISSIONS = {
         Permission.RELEASE_UNUSED,
         Permission.QUERY_EVENTS,
         Permission.EXPORT_SCHEDULE,
+        Permission.APPROVE_RESCHEDULE,
+        Permission.REJECT_RESCHEDULE,
     },
     UserRole.RECEPTIONIST: {
         Permission.CREATE_BOOKING,
@@ -75,6 +91,8 @@ ROLE_PERMISSIONS = {
         Permission.RELEASE_UNUSED,
         Permission.QUERY_EVENTS,
         Permission.EXPORT_SCHEDULE,
+        Permission.APPROVE_RESCHEDULE,
+        Permission.REJECT_RESCHEDULE,
     },
     UserRole.SYSTEM_ADMIN: {
         Permission.CREATE_BOOKING,
@@ -88,6 +106,8 @@ ROLE_PERMISSIONS = {
         Permission.QUERY_EVENTS,
         Permission.EXPORT_SCHEDULE,
         Permission.MANAGE_ROOMS,
+        Permission.APPROVE_RESCHEDULE,
+        Permission.REJECT_RESCHEDULE,
     },
 }
 

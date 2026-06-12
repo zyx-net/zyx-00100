@@ -4,7 +4,7 @@ from datetime import datetime
 from dataclasses import dataclass, field
 import json
 
-from .permissions import BookingStatus, EventType
+from .permissions import BookingStatus, EventType, RescheduleRequestStatus
 from .events import (
     BookingCreatedData,
     BookingApprovedData,
@@ -15,6 +15,9 @@ from .events import (
     BookingReleasedData,
     BookingArbitratedData,
     BookingCompletedData,
+    RescheduleRequestedData,
+    RescheduleApprovedData,
+    RescheduleRejectedData,
 )
 
 
@@ -67,6 +70,8 @@ class BookingAggregate:
     arbitration_decision: Optional[str] = None
     arbitration_reason: Optional[str] = None
     reschedule_history: List[Dict[str, Any]] = field(default_factory=list)
+    pending_reschedule_requests: List[Dict[str, Any]] = field(default_factory=list)
+    reschedule_requests_history: List[Dict[str, Any]] = field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     _pending_events: List[Dict[str, Any]] = field(default_factory=list)
@@ -90,6 +95,12 @@ class BookingAggregate:
             self._apply_arbitrated(event_data)
         elif event_type == EventType.BOOKING_COMPLETED.value:
             self._apply_completed(event_data)
+        elif event_type == EventType.RESCHEDULE_REQUESTED.value:
+            self._apply_reschedule_requested(event_data)
+        elif event_type == EventType.RESCHEDULE_APPROVED.value:
+            self._apply_reschedule_approved(event_data)
+        elif event_type == EventType.RESCHEDULE_REJECTED.value:
+            self._apply_reschedule_rejected(event_data)
         self.version += 1
 
     def _apply_created(self, data: Dict[str, Any]) -> None:
@@ -173,6 +184,71 @@ class BookingAggregate:
         self.status = BookingStatus.COMPLETED
         self.updated_at = d.completed_at
 
+    def _apply_reschedule_requested(self, data: Dict[str, Any]) -> None:
+        d = RescheduleRequestedData(**data)
+        self.pending_reschedule_requests.append({
+            "request_id": d.request_id,
+            "requester_id": d.requester_id,
+            "requester_name": d.requester_name,
+            "old_start_time": d.old_start_time.isoformat() if isinstance(d.old_start_time, datetime) else d.old_start_time,
+            "old_end_time": d.old_end_time.isoformat() if isinstance(d.old_end_time, datetime) else d.old_end_time,
+            "old_room_id": d.old_room_id,
+            "new_start_time": d.new_start_time.isoformat() if isinstance(d.new_start_time, datetime) else d.new_start_time,
+            "new_end_time": d.new_end_time.isoformat() if isinstance(d.new_end_time, datetime) else d.new_end_time,
+            "new_room_id": d.new_room_id,
+            "reason": d.reason,
+            "status": RescheduleRequestStatus.PENDING.value,
+            "requested_at": self.updated_at.isoformat() if self.updated_at else datetime.now().isoformat(),
+        })
+        self.updated_at = datetime.now()
+
+    def _apply_reschedule_approved(self, data: Dict[str, Any]) -> None:
+        d = RescheduleApprovedData(**data)
+        for req in self.pending_reschedule_requests:
+            if req["request_id"] == d.request_id:
+                req["status"] = RescheduleRequestStatus.APPROVED.value
+                req["approver_id"] = d.approver_id
+                req["approver_name"] = d.approver_name
+                req["approve_reason"] = d.reason
+                req["approved_at"] = datetime.now().isoformat()
+                self.reschedule_requests_history.append(req)
+                self.pending_reschedule_requests.remove(req)
+                break
+        self.reschedule_history.append({
+            "old_start_time": d.old_start_time.isoformat() if isinstance(d.old_start_time, datetime) else d.old_start_time,
+            "old_end_time": d.old_end_time.isoformat() if isinstance(d.old_end_time, datetime) else d.old_end_time,
+            "old_room_id": d.old_room_id,
+            "new_start_time": d.new_start_time.isoformat() if isinstance(d.new_start_time, datetime) else d.new_start_time,
+            "new_end_time": d.new_end_time.isoformat() if isinstance(d.new_end_time, datetime) else d.new_end_time,
+            "new_room_id": d.new_room_id,
+            "rescheduler_id": d.approver_id,
+            "rescheduler_name": d.approver_name,
+            "reason": d.reason,
+            "request_id": d.request_id,
+        })
+        self.start_time = d.new_start_time
+        self.end_time = d.new_end_time
+        self.room_id = d.new_room_id
+        for other_req in self.pending_reschedule_requests:
+            other_req["status"] = RescheduleRequestStatus.SUPERSEDED.value
+            self.reschedule_requests_history.append(other_req)
+        self.pending_reschedule_requests = []
+        self.updated_at = datetime.now()
+
+    def _apply_reschedule_rejected(self, data: Dict[str, Any]) -> None:
+        d = RescheduleRejectedData(**data)
+        for req in self.pending_reschedule_requests:
+            if req["request_id"] == d.request_id:
+                req["status"] = RescheduleRequestStatus.REJECTED.value
+                req["approver_id"] = d.approver_id
+                req["approver_name"] = d.approver_name
+                req["approve_reason"] = d.reason
+                req["rejected_at"] = datetime.now().isoformat()
+                self.reschedule_requests_history.append(req)
+                self.pending_reschedule_requests.remove(req)
+                break
+        self.updated_at = datetime.now()
+
     def enqueue_event(self, event_type: str, event_data: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> None:
         self._pending_events.append({
             "event_type": event_type,
@@ -208,6 +284,8 @@ class BookingAggregate:
             "arbitration_decision": self.arbitration_decision,
             "arbitration_reason": self.arbitration_reason,
             "reschedule_history": self.reschedule_history,
+            "pending_reschedule_requests": self.pending_reschedule_requests,
+            "reschedule_requests_history": self.reschedule_requests_history,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -220,5 +298,15 @@ def rebuild_aggregate(stream_id: str, events: List[EventRecord]) -> BookingAggre
     return agg
 
 
+def _ensure_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is not None:
+        return dt.replace(tzinfo=None)
+    return dt
+
+
 def overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
+    a_start = _ensure_naive(a_start)
+    a_end = _ensure_naive(a_end)
+    b_start = _ensure_naive(b_start)
+    b_end = _ensure_naive(b_end)
     return a_start < b_end and b_start < a_end

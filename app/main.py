@@ -1,9 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+import sys
 
-from .db import init_db
+from .db import init_db, SessionLocal
 from .config import settings
 from .api.routes import router as api_router
+from .seed import seed_users
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="共享会议室预订冲突仲裁 API",
@@ -26,6 +38,15 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     init_db()
+    db = SessionLocal()
+    try:
+        created = seed_users(db)
+        if created > 0:
+            logger.info(f"已初始化 {created} 个用户")
+    finally:
+        db.close()
+    logger.info(f"会议室预订系统启动完成，规则版本: {settings.rule_version}")
+    logger.info(f"已配置 {len(settings.rooms)} 个房间")
 
 
 @app.get("/", tags=["根"])

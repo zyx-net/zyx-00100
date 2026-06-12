@@ -211,6 +211,33 @@ class CommandHandler:
         return {"booking": new_agg.to_dict(), "events": [e.to_dict() for e in events]}
 
     def reschedule_booking(self, cmd: RescheduleBookingCmd, actor_id: str, actor_role: UserRole, actor_name: str) -> Dict[str, Any]:
+        from .reschedule_service import RescheduleApprovalService
+        from .commands import SubmitRescheduleRequestCmd
+
+        can_direct_approve = has_permission(actor_role, Permission.APPROVE_RESCHEDULE)
+
+        if not can_direct_approve:
+            svc = RescheduleApprovalService(self.db)
+            submit_cmd = SubmitRescheduleRequestCmd(
+                booking_id=cmd.booking_id,
+                requester_id=cmd.rescheduler_id,
+                requester_name=cmd.rescheduler_name,
+                new_start_time=cmd.new_start_time,
+                new_end_time=cmd.new_end_time,
+                new_room_id=cmd.new_room_id,
+                reason=cmd.reason,
+                expected_version=cmd.expected_version,
+            )
+            result = svc.submit_request(submit_cmd, actor_id, actor_role, actor_name)
+            return {
+                "booking": result["booking"],
+                "events": result["events"],
+                "reschedule_request": result["request"],
+                "requires_approval": True,
+                "has_internal_conflicts": result.get("has_internal_conflicts", False),
+                "internal_conflicts": result.get("internal_conflicts", []),
+            }
+
         agg = self.store.load_aggregate(cmd.booking_id)
         if agg.version == 0:
             raise DomainError("BOOKING_NOT_FOUND", f"预订 {cmd.booking_id} 不存在")
@@ -311,7 +338,11 @@ class CommandHandler:
                               {"stream_id": e.stream_id, "expected": e.expected_version, "actual": e.actual_version})
 
         new_agg = self.store.load_aggregate(cmd.booking_id)
-        return {"booking": new_agg.to_dict(), "events": [e.to_dict() for e in events]}
+        return {
+            "booking": new_agg.to_dict(),
+            "events": [e.to_dict() for e in events],
+            "requires_approval": False,
+        }
 
     def cancel_booking(self, cmd: CancelBookingCmd, actor_id: str, actor_role: UserRole, actor_name: str) -> Dict[str, Any]:
         if not has_permission(actor_role, Permission.CANCEL_BOOKING):

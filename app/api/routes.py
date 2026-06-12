@@ -13,9 +13,11 @@ from ..services.commands import (
     CreateBookingCmd, ApproveBookingCmd, RejectBookingCmd,
     RescheduleBookingCmd, CancelBookingCmd, CheckInCmd,
     ReleaseBookingCmd, ArbitrateCmd, CompleteBookingCmd,
+    SubmitRescheduleRequestCmd, ApproveRescheduleRequestCmd, RejectRescheduleRequestCmd,
 )
 from ..services.queries import QueryService
 from ..services.arbitration import ArbitrationService
+from ..services.reschedule_service import RescheduleApprovalService
 from ..models import schemas as S
 
 router = APIRouter(prefix="/api/v1", tags=["会议室预订"])
@@ -133,7 +135,7 @@ def reject_booking(
     }
 
 
-@router.post("/bookings/{booking_id}/reschedule", response_model=S.CommandResponse)
+@router.post("/bookings/{booking_id}/reschedule", response_model=S.RescheduleApprovalResponse)
 def reschedule_booking(
     booking_id: str,
     req: S.RescheduleBookingRequest,
@@ -154,12 +156,17 @@ def reschedule_booking(
     try:
         result = handler.reschedule_booking(cmd, actor["actor_id"], actor["actor_role"], actor["actor_name"])
     except DomainError as e:
-        return _error_resp(e, 409 if e.code in ("BOOKING_CONFLICT", "CONCURRENCY_CONFLICT") else 400)
+        return _error_resp(e, 409 if e.code in ("BOOKING_CONFLICT", "CONCURRENCY_CONFLICT", "PENDING_REQUEST_CONFLICT") else 400)
     return {
         "success": True,
+        "request": result.get("reschedule_request"),
         "booking": result["booking"],
         "events": result["events"],
         "rule_version": settings.rule_version,
+        "requires_approval": result.get("requires_approval", False),
+        "has_internal_conflicts": result.get("has_internal_conflicts", False),
+        "internal_conflicts": result.get("internal_conflicts", []),
+        "superseded_requests": result.get("superseded_requests", []),
     }
 
 
@@ -382,6 +389,121 @@ def auto_release(
 ):
     svc = ArbitrationService(db)
     return svc.auto_release_stale(actor["actor_id"], actor["actor_name"], actor["actor_role"])
+
+
+@router.post("/reschedule-requests/{request_id}/approve", response_model=S.RescheduleApprovalResponse)
+def approve_reschedule_request(
+    request_id: str,
+    req: S.ApproveRescheduleRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = RescheduleApprovalService(db)
+    if req.request_id and req.request_id != request_id:
+        return _error_resp(DomainError("ID_MISMATCH", "路径ID与请求体ID不一致"), 400)
+    cmd = ApproveRescheduleRequestCmd(
+        request_id=request_id,
+        approver_id=req.approver_id,
+        approver_name=req.approver_name,
+        reason=req.reason,
+        expected_version=req.expected_version,
+    )
+    try:
+        result = svc.approve_request(cmd, actor["actor_id"], actor["actor_role"], actor["actor_name"])
+    except DomainError as e:
+        return _error_resp(e, 409 if e.code in ("BOOKING_CONFLICT", "CONCURRENCY_CONFLICT", "PENDING_REQUEST_CONFLICT") else 400)
+    return {
+        "success": True,
+        "request": result["request"],
+        "booking": result["booking"],
+        "events": result["events"],
+        "rule_version": settings.rule_version,
+        "superseded_requests": result.get("superseded_requests", []),
+    }
+
+
+@router.post("/reschedule-requests/{request_id}/reject", response_model=S.RescheduleApprovalResponse)
+def reject_reschedule_request(
+    request_id: str,
+    req: S.RejectRescheduleRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = RescheduleApprovalService(db)
+    if req.request_id and req.request_id != request_id:
+        return _error_resp(DomainError("ID_MISMATCH", "路径ID与请求体ID不一致"), 400)
+    cmd = RejectRescheduleRequestCmd(
+        request_id=request_id,
+        approver_id=req.approver_id,
+        approver_name=req.approver_name,
+        reason=req.reason,
+        expected_version=req.expected_version,
+    )
+    try:
+        result = svc.reject_request(cmd, actor["actor_id"], actor["actor_role"], actor["actor_name"])
+    except DomainError as e:
+        return _error_resp(e, 409 if e.code == "CONCURRENCY_CONFLICT" else 400)
+    return {
+        "success": True,
+        "request": result["request"],
+        "booking": result["booking"],
+        "events": result["events"],
+        "rule_version": settings.rule_version,
+    }
+
+
+@router.get("/reschedule-requests/{request_id}", response_model=S.RescheduleApprovalResponse)
+def get_reschedule_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+):
+    svc = RescheduleApprovalService(db)
+    try:
+        req = svc.get_request(request_id)
+    except DomainError as e:
+        return _error_resp(e, 404)
+    return {
+        "success": True,
+        "request": req,
+        "rule_version": settings.rule_version,
+    }
+
+
+@router.get("/reschedule-requests", response_model=S.RescheduleRequestListResponse)
+def list_reschedule_requests(
+    booking_id: Optional[str] = Query(None, description="预订ID"),
+    status: Optional[str] = Query(None, description="状态过滤"),
+    requester_id: Optional[str] = Query(None, description="申请人ID"),
+    room_id: Optional[str] = Query(None, description="房间ID"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    svc = RescheduleApprovalService(db)
+    return svc.list_requests(
+        booking_id=booking_id,
+        status=status,
+        requester_id=requester_id,
+        room_id=room_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/bookings/{booking_id}/reschedule-requests/pending", response_model=S.RescheduleRequestListResponse)
+def get_booking_pending_reschedule_requests(
+    booking_id: str,
+    db: Session = Depends(get_db),
+):
+    svc = RescheduleApprovalService(db)
+    items = svc.get_booking_pending_requests(booking_id)
+    return {
+        "total": len(items),
+        "limit": len(items),
+        "offset": 0,
+        "items": items,
+        "rule_version": settings.rule_version,
+    }
 
 
 @router.get("/health")

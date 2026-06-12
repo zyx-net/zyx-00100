@@ -7,9 +7,25 @@ from __future__ import annotations
 import sys, os, json
 from datetime import datetime, timezone, timedelta
 
-db_path = os.path.join(os.path.dirname(__file__), "room_booking.db")
+db_path = os.path.join(os.path.dirname(__file__), "main_flow_test.db")
 if os.path.exists(db_path):
-    os.remove(db_path)
+    try:
+        import time
+        time.sleep(0.5)
+        os.remove(db_path)
+    except Exception as e:
+        print(f"Warning: Could not remove existing database: {e}")
+
+# Override database URL before importing app modules
+os.environ["APP_DATABASE_URL"] = f"sqlite:///{db_path}"
+
+from app.config import settings
+settings.database_url = f"sqlite:///{db_path}"
+
+# Force reimport to use new database URL
+import importlib
+import app.db
+importlib.reload(app.db)
 
 from app.db import init_db, SessionLocal
 from app.seed import seed_users
@@ -199,10 +215,9 @@ def step_07(db, ctx):
     print(f"      导出 {csv_result['row_count']} 行，rule_version={csv_result['rule_version']}")
 
 
-@t("08 回归-成员改自己的预订成功（原 UnboundLocalError 场景：member 无 RESCHEDULE_BOOKING 权限走 fallback）")
+@t("08 回归-成员改自己的预订生成待审批请求（新的改期审批流程）")
 def step_08(db, ctx):
     handler = CommandHandler(db)
-    # 创建专属临时 booking 给张三改期（不依赖 bk1 的 checked_in 状态）
     t_start = (datetime.now(TZ) + timedelta(days=1)).replace(hour=15, minute=0, second=0, microsecond=0)
     t_end = t_start + timedelta(hours=1)
     r = handler.create_booking(
@@ -215,7 +230,6 @@ def step_08(db, ctx):
     )
     tmp_id = r["booking"]["booking_id"]
     tmp_ver = r["booking"]["version"]
-    # 张三（member）改自己的：member 没有 RESCHEDULE_BOOKING，会触发 agg.owner_id 判断分支
     new_start = t_start + timedelta(hours=1)
     new_end = new_start + timedelta(hours=1)
     cmd = RescheduleBookingCmd(
@@ -231,9 +245,12 @@ def step_08(db, ctx):
     b = result["booking"]
     assert b["status"] == "approved"
     assert b["version"] == tmp_ver + 1
-    assert b["start_time"] == new_start.isoformat()
-    assert len(b["reschedule_history"]) == 1
-    print(f"      成员自改: {tmp_id} v{tmp_ver}→v{b['version']} 时段={new_start.strftime('%H:%M')}-{new_end.strftime('%H:%M')}")
+    assert result["requires_approval"] == True
+    assert result["reschedule_request"] is not None
+    assert result["reschedule_request"]["status"] == "pending"
+    assert b["start_time"] == t_start.isoformat()  # 原时间不变
+    assert len(b["pending_reschedule_requests"]) == 1
+    print(f"      成员自改生成审批请求: {tmp_id} 新时段={new_start.strftime('%H:%M')}-{new_end.strftime('%H:%M')}")
 
 
 @t("09 回归-成员赵六改张三的预订被拒绝 PERMISSION_DENIED")
