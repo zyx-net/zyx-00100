@@ -335,8 +335,27 @@ def step_23(db, ctx):
     assert analysis["has_conflict"] == True
     assert analysis["incumbent"] is not None
     assert analysis["rule_version"] == settings.rule_version
+    assert "affected" in analysis
     suggestions = arb.suggest_alternative_slots("room-101", start, end, search_days=1)
     print(f"      冲突={analysis['conflict_count']} 建议={len(suggestions)}")
+
+
+@t("24 回归-无冲突窗口 analyze_conflicts 返回 rule_version 不 500")
+def step_24(db, ctx):
+    arb = ArbitrationService(db)
+    free_start = datetime.now(TZ) + timedelta(days=5)
+    free_start = free_start.replace(hour=8, minute=0, second=0, microsecond=0)
+    free_end = free_start + timedelta(hours=1)
+    analysis = arb.analyze_conflicts("room-101", free_start, free_end)
+    assert analysis["has_conflict"] == False, f"应无冲突 got {analysis}"
+    assert analysis["conflict_count"] == 0
+    assert analysis["recommendation"] == "ALLOW"
+    assert analysis["rule_version"] == settings.rule_version, \
+        f"rule_version 缺失或不一致: {analysis.get('rule_version')}"
+    assert analysis["incumbent"] is None
+    assert analysis["affected"] == []
+    assert "window" in analysis
+    print(f"      无冲突: rule_version={analysis['rule_version']} rec={analysis['recommendation']}")
 
 
 def main():
@@ -362,6 +381,7 @@ def main():
         (step_21, (db, ctx)),
         (step_22, (db, ctx)),
         (step_23, (db, ctx)),
+        (step_24, (db, ctx)),
     ]
     passed = 0
     failed = 0

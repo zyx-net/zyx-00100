@@ -149,17 +149,50 @@ code, d = req("GET", f"/api/v1/events?stream_id={bk_id}")
 assert code == 200
 print(f"[OK 200] /api/v1/events stream={bk_id} -> events={d['total']} rule={d['rule_version']}")
 
-# 12. Conflict analysis
+# 12. Conflict analysis (has conflict)
 qs = urllib.parse.urlencode({
     "room_id": "room-101",
     "start": start.isoformat(),
     "end": end.isoformat(),
 })
 code, d = req("GET", f"/api/v1/conflicts/analyze?{qs}")
-assert code == 200
-print(f"[OK 200] conflicts/analyze -> has_conflict={d['has_conflict']} rec={d['recommendation']}")
+assert code == 200, f"conflict analyze got {code}: {d}"
+assert d["has_conflict"] == True
+assert d["rule_version"] == "v1.0.0"
+assert d["incumbent"] is not None
+assert isinstance(d["affected"], list) and len(d["affected"]) >= 1
+print(f"[OK 200] conflicts/analyze (conflict) -> has_conflict=True rule={d['rule_version']} rec={d['recommendation']}")
 
-# 13. Get single booking
+# 14. REGRESSION: Conflict analysis (NO conflict / free window) - must NOT 500
+free_start = (datetime.now(TZ) + timedelta(days=7)).replace(hour=8, minute=0, second=0, microsecond=0)
+free_end = free_start + timedelta(hours=1)
+qs_free = urllib.parse.urlencode({
+    "room_id": "room-101",
+    "start": free_start.isoformat(),
+    "end": free_end.isoformat(),
+})
+code, d = req("GET", f"/api/v1/conflicts/analyze?{qs_free}")
+assert code != 500, f"REGRESSION: free window returned 500! got {code}: {d}"
+assert code == 200, f"free window analyze got {code}: {d}"
+assert d["has_conflict"] == False
+assert d["conflict_count"] == 0
+assert d["recommendation"] == "ALLOW"
+assert d["rule_version"] == "v1.0.0", f"rule_version missing or wrong: {d.get('rule_version')}"
+assert d["incumbent"] is None
+assert d["affected"] == []
+print(f"[OK 200] conflicts/analyze (FREE) -> has_conflict=False rule={d['rule_version']} rec={d['recommendation']} NO 500")
+
+# 15. rule_version consistency across endpoints
+code_rooms, rooms_d = req("GET", "/api/v1/rooms")
+code_sched, sched_d = req("GET", "/api/v1/schedule")
+code_export, export_d = req("GET", "/api/v1/export?format=json")
+rv = rooms_d["rule_version"]
+assert sched_d["rule_version"] == rv
+assert export_d["rule_version"] == rv
+assert d["rule_version"] == rv
+print(f"[OK] rule_version consistent across all endpoints: {rv}")
+
+# 16. Get single booking
 code, d = req("GET", f"/api/v1/bookings/{bk_id}")
 assert code == 200
 print(f"[OK 200] GET booking -> status={d['booking']['status']} ver={d['booking']['version']}")

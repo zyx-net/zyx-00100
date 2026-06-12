@@ -29,12 +29,15 @@ class ArbitrationService:
 
         if not conflicts:
             return {
+                "rule_version": settings.rule_version,
                 "room_id": room_id,
                 "window": {"start": start.isoformat(), "end": end.isoformat()},
                 "has_conflict": False,
                 "conflict_count": 0,
                 "recommendation": "ALLOW",
                 "reason": "该时间段无冲突",
+                "incumbent": None,
+                "affected": [],
             }
 
         room_cfg = get_room_config(room_id)
