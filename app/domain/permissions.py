@@ -28,6 +28,22 @@ class RescheduleRequestStatus(str, Enum):
     CONFLICT = "conflict"
 
 
+class WaitlistStatus(str, Enum):
+    WAITING = "waiting"
+    MATCHED = "matched"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    REJECTED = "rejected"
+
+
+class WaitlistMatchStatus(str, Enum):
+    MATCHED = "matched"
+    NOT_MATCHED = "not_matched"
+    TIME_MISMATCH = "time_mismatch"
+    DUPLICATE_MATCH = "duplicate_match"
+
+
 class EventType(str, Enum):
     BOOKING_CREATED = "booking_created"
     BOOKING_APPROVED = "booking_approved"
@@ -41,6 +57,11 @@ class EventType(str, Enum):
     RESCHEDULE_REQUESTED = "reschedule_requested"
     RESCHEDULE_APPROVED = "reschedule_approved"
     RESCHEDULE_REJECTED = "reschedule_rejected"
+    WAITLIST_SUBMITTED = "waitlist_submitted"
+    WAITLIST_MATCHED = "waitlist_matched"
+    WAITLIST_CONFIRMED = "waitlist_confirmed"
+    WAITLIST_CANCELLED = "waitlist_cancelled"
+    WAITLIST_EXPIRED = "waitlist_expired"
 
 
 class Permission(str, Enum):
@@ -57,6 +78,9 @@ class Permission(str, Enum):
     MANAGE_ROOMS = "manage_rooms"
     APPROVE_RESCHEDULE = "approve_reschedule"
     REJECT_RESCHEDULE = "reject_reschedule"
+    SUBMIT_WAITLIST = "submit_waitlist"
+    MANAGE_WAITLIST = "manage_waitlist"
+    VIEW_ALL_WAITLIST = "view_all_waitlist"
 
 
 ROLE_PERMISSIONS = {
@@ -67,6 +91,7 @@ ROLE_PERMISSIONS = {
         Permission.QUERY_EVENTS,
         Permission.EXPORT_SCHEDULE,
         Permission.RESCHEDULE_BOOKING,
+        Permission.SUBMIT_WAITLIST,
     },
     UserRole.TEAM_ADMIN: {
         Permission.CREATE_BOOKING,
@@ -80,6 +105,9 @@ ROLE_PERMISSIONS = {
         Permission.EXPORT_SCHEDULE,
         Permission.APPROVE_RESCHEDULE,
         Permission.REJECT_RESCHEDULE,
+        Permission.SUBMIT_WAITLIST,
+        Permission.MANAGE_WAITLIST,
+        Permission.VIEW_ALL_WAITLIST,
     },
     UserRole.RECEPTIONIST: {
         Permission.CREATE_BOOKING,
@@ -93,6 +121,9 @@ ROLE_PERMISSIONS = {
         Permission.EXPORT_SCHEDULE,
         Permission.APPROVE_RESCHEDULE,
         Permission.REJECT_RESCHEDULE,
+        Permission.SUBMIT_WAITLIST,
+        Permission.MANAGE_WAITLIST,
+        Permission.VIEW_ALL_WAITLIST,
     },
     UserRole.SYSTEM_ADMIN: {
         Permission.CREATE_BOOKING,
@@ -108,6 +139,9 @@ ROLE_PERMISSIONS = {
         Permission.MANAGE_ROOMS,
         Permission.APPROVE_RESCHEDULE,
         Permission.REJECT_RESCHEDULE,
+        Permission.SUBMIT_WAITLIST,
+        Permission.MANAGE_WAITLIST,
+        Permission.VIEW_ALL_WAITLIST,
     },
 }
 

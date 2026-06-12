@@ -43,6 +43,12 @@ def on_startup():
         created = seed_users(db)
         if created > 0:
             logger.info(f"已初始化 {created} 个用户")
+
+        from .services.waitlist_service import WaitlistService
+        wl_svc = WaitlistService(db)
+        expired = wl_svc.expire_stale_waitlists()
+        if expired > 0:
+            logger.info(f"启动清理: 已将 {expired} 个超时未确认的候补标记为过期")
     finally:
         db.close()
     logger.info(f"会议室预订系统启动完成，规则版本: {settings.rule_version}")

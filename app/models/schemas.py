@@ -213,3 +213,90 @@ class RescheduleApprovalResponse(BaseModel):
 class SuggestionResponse(BaseModel):
     rule_version: str
     suggestions: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class SubmitWaitlistRequest(BaseModel):
+    room_id: str
+    requester_id: str
+    requester_name: str
+    team_id: Optional[str] = None
+    title: str
+    desired_start_time: datetime
+    desired_end_time: datetime
+    flex_before_minutes: int = 0
+    flex_after_minutes: int = 0
+    attendees: List[str] = Field(default_factory=list)
+    priority_note: Optional[str] = None
+    contact_info: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ConfirmWaitlistRequest(BaseModel):
+    waitlist_id: str
+    confirmer_id: str
+    confirmer_name: str
+    reason: Optional[str] = None
+
+
+class CancelWaitlistRequest(BaseModel):
+    waitlist_id: str
+    canceller_id: str
+    canceller_name: str
+    reason: Optional[str] = None
+
+
+class RejectWaitlistRequest(BaseModel):
+    waitlist_id: str
+    rejecter_id: str
+    rejecter_name: str
+    reason: str
+
+
+class WaitlistEntryResponse(BaseModel):
+    waitlist_id: str
+    room_id: str
+    requester_id: str
+    requester_name: str
+    requester_role: str
+    team_id: Optional[str]
+    desired_start_time: Optional[datetime]
+    desired_end_time: Optional[datetime]
+    flex_before_minutes: int
+    flex_after_minutes: int
+    title: str
+    attendees: Optional[List[str]]
+    priority_note: Optional[str]
+    contact_info: Optional[str]
+    description: Optional[str]
+    status: str
+    matched_booking_id: Optional[str]
+    matched_start_time: Optional[datetime]
+    matched_end_time: Optional[datetime]
+    match_reason: Optional[str]
+    matched_at: Optional[datetime]
+    confirmed_by_id: Optional[str]
+    confirmed_by_name: Optional[str]
+    confirmed_at: Optional[datetime]
+    result_booking_id: Optional[str]
+    expire_at: Optional[datetime]
+    expired_at: Optional[datetime]
+    expire_reason: Optional[str]
+    rule_version: str
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+
+class WaitlistListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    rule_version: str
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class WaitlistActionResponse(BaseModel):
+    success: bool = True
+    waitlist: Optional[Dict[str, Any]] = None
+    booking: Optional[Dict[str, Any]] = None
+    events: List[Dict[str, Any]] = Field(default_factory=list)
+    rule_version: str

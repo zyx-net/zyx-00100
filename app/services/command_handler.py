@@ -3,8 +3,11 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 import uuid
+import logging
 
 from .event_store import EventStoreService, ConcurrencyError
+
+logger = logging.getLogger(__name__)
 from .commands import (
     CreateBookingCmd, ApproveBookingCmd, RejectBookingCmd,
     RescheduleBookingCmd, CancelBookingCmd, CheckInCmd,
@@ -338,6 +341,23 @@ class CommandHandler:
                               {"stream_id": e.stream_id, "expected": e.expected_version, "actual": e.actual_version})
 
         new_agg = self.store.load_aggregate(cmd.booking_id)
+
+        from .waitlist_service import WaitlistService
+        if old_room_id and agg.start_time and agg.end_time:
+            try:
+                wl_svc = WaitlistService(self.db)
+                wl_svc.match_waitlists_for_slot(
+                    freed_room_id=old_room_id,
+                    freed_start=agg.start_time,
+                    freed_end=agg.end_time,
+                    trigger_event="BOOKING_RESCHEDULED",
+                    trigger_booking_id=cmd.booking_id,
+                    operator_id=actor_id,
+                    operator_name=actor_name,
+                )
+            except Exception as e:
+                logger.warning(f"改期后触发候补匹配失败: {e}")
+
         return {
             "booking": new_agg.to_dict(),
             "events": [e.to_dict() for e in events],
@@ -390,6 +410,23 @@ class CommandHandler:
                               {"stream_id": e.stream_id, "expected": e.expected_version, "actual": e.actual_version})
 
         new_agg = self.store.load_aggregate(cmd.booking_id)
+
+        from .waitlist_service import WaitlistService
+        if new_agg.room_id and new_agg.start_time and new_agg.end_time:
+            try:
+                wl_svc = WaitlistService(self.db)
+                wl_svc.match_waitlists_for_slot(
+                    freed_room_id=new_agg.room_id,
+                    freed_start=new_agg.start_time,
+                    freed_end=new_agg.end_time,
+                    trigger_event="BOOKING_CANCELLED",
+                    trigger_booking_id=cmd.booking_id,
+                    operator_id=actor_id,
+                    operator_name=actor_name,
+                )
+            except Exception as e:
+                logger.warning(f"取消后触发候补匹配失败: {e}")
+
         return {"booking": new_agg.to_dict(), "events": [e.to_dict() for e in events]}
 
     def check_in(self, cmd: CheckInCmd, actor_id: str, actor_role: UserRole, actor_name: str) -> Dict[str, Any]:
@@ -491,6 +528,23 @@ class CommandHandler:
                               {"stream_id": e.stream_id, "expected": e.expected_version, "actual": e.actual_version})
 
         new_agg = self.store.load_aggregate(cmd.booking_id)
+
+        from .waitlist_service import WaitlistService
+        if new_agg.room_id and new_agg.start_time and new_agg.end_time:
+            try:
+                wl_svc = WaitlistService(self.db)
+                wl_svc.match_waitlists_for_slot(
+                    freed_room_id=new_agg.room_id,
+                    freed_start=new_agg.start_time,
+                    freed_end=new_agg.end_time,
+                    trigger_event="BOOKING_RELEASED",
+                    trigger_booking_id=cmd.booking_id,
+                    operator_id=actor_id,
+                    operator_name=actor_name,
+                )
+            except Exception as e:
+                logger.warning(f"释放后触发候补匹配失败: {e}")
+
         return {"booking": new_agg.to_dict(), "events": [e.to_dict() for e in events]}
 
     def arbitrate(self, cmd: ArbitrateCmd, actor_id: str, actor_role: UserRole, actor_name: str) -> Dict[str, Any]:

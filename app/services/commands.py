@@ -109,3 +109,40 @@ class RejectRescheduleRequestCmd(BaseModel):
     approver_name: str
     reason: str
     expected_version: int
+
+
+class SubmitWaitlistCmd(BaseModel):
+    room_id: str
+    requester_id: str
+    requester_name: str
+    team_id: Optional[str] = None
+    title: str
+    desired_start_time: datetime
+    desired_end_time: datetime
+    flex_before_minutes: int = 0
+    flex_after_minutes: int = 0
+    attendees: List[str] = Field(default_factory=list)
+    priority_note: Optional[str] = None
+    contact_info: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ConfirmWaitlistCmd(BaseModel):
+    waitlist_id: str
+    confirmer_id: str
+    confirmer_name: str
+    reason: Optional[str] = None
+
+
+class CancelWaitlistCmd(BaseModel):
+    waitlist_id: str
+    canceller_id: str
+    canceller_name: str
+    reason: Optional[str] = None
+
+
+class RejectWaitlistCmd(BaseModel):
+    waitlist_id: str
+    rejecter_id: str
+    rejecter_name: str
+    reason: str

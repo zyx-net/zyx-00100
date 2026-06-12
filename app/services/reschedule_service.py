@@ -430,6 +430,23 @@ class RescheduleApprovalService:
         self.db.commit()
 
         new_agg = self.store.load_aggregate(req.booking_id)
+
+        from .waitlist_service import WaitlistService
+        if req.old_room_id and req.old_start_time and req.old_end_time:
+            try:
+                wl_svc = WaitlistService(self.db)
+                wl_svc.match_waitlists_for_slot(
+                    freed_room_id=req.old_room_id,
+                    freed_start=req.old_start_time,
+                    freed_end=req.old_end_time,
+                    trigger_event="BOOKING_RESCHEDULED",
+                    trigger_booking_id=req.booking_id,
+                    operator_id=actor_id,
+                    operator_name=actor_name,
+                )
+            except Exception as e:
+                logger.warning(f"改期批准后触发候补匹配失败: {e}")
+
         logger.info(
             f"改期请求已批准: request_id={req.request_id}, booking_id={req.booking_id}, "
             f"approver={cmd.approver_name}, "

@@ -14,10 +14,12 @@ from ..services.commands import (
     RescheduleBookingCmd, CancelBookingCmd, CheckInCmd,
     ReleaseBookingCmd, ArbitrateCmd, CompleteBookingCmd,
     SubmitRescheduleRequestCmd, ApproveRescheduleRequestCmd, RejectRescheduleRequestCmd,
+    SubmitWaitlistCmd, ConfirmWaitlistCmd, CancelWaitlistCmd, RejectWaitlistCmd,
 )
 from ..services.queries import QueryService
 from ..services.arbitration import ArbitrationService
 from ..services.reschedule_service import RescheduleApprovalService
+from ..services.waitlist_service import WaitlistService
 from ..models import schemas as S
 
 router = APIRouter(prefix="/api/v1", tags=["会议室预订"])
@@ -502,6 +504,181 @@ def get_booking_pending_reschedule_requests(
         "limit": len(items),
         "offset": 0,
         "items": items,
+        "rule_version": settings.rule_version,
+    }
+
+
+# ---------- 候补队列接口 ----------
+
+@router.post("/waitlist", response_model=S.WaitlistActionResponse)
+def submit_waitlist(
+    req: S.SubmitWaitlistRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = WaitlistService(db)
+    cmd = SubmitWaitlistCmd(
+        room_id=req.room_id,
+        requester_id=req.requester_id,
+        requester_name=req.requester_name,
+        team_id=req.team_id,
+        title=req.title,
+        desired_start_time=req.desired_start_time,
+        desired_end_time=req.desired_end_time,
+        flex_before_minutes=req.flex_before_minutes,
+        flex_after_minutes=req.flex_after_minutes,
+        attendees=req.attendees,
+        priority_note=req.priority_note,
+        contact_info=req.contact_info,
+        description=req.description,
+    )
+    try:
+        result = svc.submit_waitlist(cmd, actor["actor_id"], actor["actor_role"], actor["actor_name"])
+    except DomainError as e:
+        return _error_resp(e, 409 if e.code in ("DUPLICATE_WAITLIST", "NO_CONFLICT") else 400)
+    return {
+        "success": True,
+        "waitlist": result["waitlist"],
+        "rule_version": settings.rule_version,
+    }
+
+
+@router.get("/waitlist/{waitlist_id}", response_model=S.WaitlistActionResponse)
+def get_waitlist(
+    waitlist_id: str,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = WaitlistService(db)
+    try:
+        result = svc.get_waitlist(waitlist_id, actor["actor_id"], actor["actor_role"])
+    except DomainError as e:
+        return _error_resp(e, 404 if e.code == "WAITLIST_NOT_FOUND" else 403)
+    return {
+        "success": True,
+        "waitlist": result["waitlist"],
+        "rule_version": settings.rule_version,
+    }
+
+
+@router.get("/waitlist", response_model=S.WaitlistListResponse)
+def list_waitlists(
+    room_id: Optional[str] = Query(None, description="房间ID过滤"),
+    status: Optional[str] = Query(None, description="状态过滤"),
+    requester_id: Optional[str] = Query(None, description="申请人ID过滤（仅管理员可用）"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = WaitlistService(db)
+    return svc.list_waitlists(
+        actor_id=actor["actor_id"],
+        actor_role=actor["actor_role"],
+        room_id=room_id,
+        status=status,
+        requester_id=requester_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/waitlist/{waitlist_id}/confirm", response_model=S.WaitlistActionResponse)
+def confirm_waitlist(
+    waitlist_id: str,
+    req: S.ConfirmWaitlistRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = WaitlistService(db)
+    if req.waitlist_id and req.waitlist_id != waitlist_id:
+        return _error_resp(DomainError("ID_MISMATCH", "路径ID与请求体ID不一致"), 400)
+    cmd = ConfirmWaitlistCmd(
+        waitlist_id=waitlist_id,
+        confirmer_id=req.confirmer_id,
+        confirmer_name=req.confirmer_name,
+        reason=req.reason,
+    )
+    try:
+        result = svc.confirm_waitlist(cmd, actor["actor_id"], actor["actor_role"], actor["actor_name"])
+    except DomainError as e:
+        return _error_resp(e, 409 if e.code in ("BOOKING_CONFLICT", "WAITLIST_EXPIRED") else 400)
+    return {
+        "success": True,
+        "waitlist": result["waitlist"],
+        "booking": result.get("booking"),
+        "events": result.get("events", []),
+        "rule_version": settings.rule_version,
+    }
+
+
+@router.post("/waitlist/{waitlist_id}/cancel", response_model=S.WaitlistActionResponse)
+def cancel_waitlist(
+    waitlist_id: str,
+    req: S.CancelWaitlistRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = WaitlistService(db)
+    if req.waitlist_id and req.waitlist_id != waitlist_id:
+        return _error_resp(DomainError("ID_MISMATCH", "路径ID与请求体ID不一致"), 400)
+    cmd = CancelWaitlistCmd(
+        waitlist_id=waitlist_id,
+        canceller_id=req.canceller_id,
+        canceller_name=req.canceller_name,
+        reason=req.reason,
+    )
+    try:
+        result = svc.cancel_waitlist(cmd, actor["actor_id"], actor["actor_role"], actor["actor_name"])
+    except DomainError as e:
+        return _error_resp(e, 400)
+    return {
+        "success": True,
+        "waitlist": result["waitlist"],
+        "rule_version": settings.rule_version,
+    }
+
+
+@router.post("/waitlist/{waitlist_id}/reject", response_model=S.WaitlistActionResponse)
+def reject_waitlist(
+    waitlist_id: str,
+    req: S.RejectWaitlistRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = WaitlistService(db)
+    if req.waitlist_id and req.waitlist_id != waitlist_id:
+        return _error_resp(DomainError("ID_MISMATCH", "路径ID与请求体ID不一致"), 400)
+    cmd = RejectWaitlistCmd(
+        waitlist_id=waitlist_id,
+        rejecter_id=req.rejecter_id,
+        rejecter_name=req.rejecter_name,
+        reason=req.reason,
+    )
+    try:
+        result = svc.reject_waitlist(cmd, actor["actor_id"], actor["actor_role"], actor["actor_name"])
+    except DomainError as e:
+        return _error_resp(e, 403 if e.code == "PERMISSION_DENIED" else 400)
+    return {
+        "success": True,
+        "waitlist": result["waitlist"],
+        "rule_version": settings.rule_version,
+    }
+
+
+@router.post("/maintenance/expire-waitlist")
+def expire_stale_waitlists(
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    from ..domain.permissions import Permission, has_permission
+    if not has_permission(actor["actor_role"], Permission.MANAGE_WAITLIST):
+        return _error_resp(DomainError("PERMISSION_DENIED", "仅管理员可执行过期清理"), 403)
+    svc = WaitlistService(db)
+    count = svc.expire_stale_waitlists()
+    return {
+        "success": True,
+        "expired_count": count,
         "rule_version": settings.rule_version,
     }
 
