@@ -265,6 +265,116 @@ class BulkImportOperationLog(Base):
     created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
 
 
+class DeactivationPlan(Base):
+    __tablename__ = "deactivation_plans"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String(128), nullable=False, unique=True, index=True)
+    room_id = Column(String(64), nullable=False, index=True)
+
+    reason = Column(Text, nullable=False)
+    impact_scope = Column(String(256), nullable=True)
+    allow_auto_reschedule = Column(Boolean, nullable=False, default=False)
+
+    recurrence_type = Column(String(32), nullable=False, default="once")
+    recurrence_rule = Column(Text, nullable=True)
+
+    window_start = Column(DateTime, nullable=False)
+    window_end = Column(DateTime, nullable=False)
+    until_date = Column(DateTime, nullable=True)
+
+    status = Column(String(32), nullable=False, default="draft", index=True)
+    version = Column(BigInteger, nullable=False, default=1)
+
+    creator_id = Column(String(64), nullable=False)
+    creator_name = Column(String(128), nullable=False)
+    creator_role = Column(String(32), nullable=False)
+
+    precheck_at = Column(DateTime, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    processing_started_at = Column(DateTime, nullable=True)
+    processed_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+    revoker_id = Column(String(64), nullable=True)
+    revoker_name = Column(String(128), nullable=True)
+
+    expanded_windows = Column(Text, nullable=True)
+
+    total_conflicts = Column(Integer, nullable=False, default=0)
+    resolved_conflicts = Column(Integer, nullable=False, default=0)
+    pending_conflicts = Column(Integer, nullable=False, default=0)
+
+    rule_version = Column(String(32), nullable=False, default="v1.0.0")
+    created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
+    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("ix_deact_room_status", "room_id", "status"),
+        Index("ix_deact_window", "window_start", "window_end"),
+        Index("ix_deact_status", "status"),
+    )
+
+
+class DeactivationConflictSnapshot(Base):
+    __tablename__ = "deactivation_conflict_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id = Column(String(128), nullable=False, unique=True, index=True)
+    plan_id = Column(String(128), nullable=False, index=True)
+
+    booking_id = Column(String(128), nullable=False, index=True)
+    booking_room_id = Column(String(64), nullable=False)
+    booking_owner_id = Column(String(64), nullable=False)
+    booking_owner_name = Column(String(128), nullable=True)
+    booking_title = Column(String(256), nullable=True)
+    booking_start_time = Column(DateTime, nullable=False)
+    booking_end_time = Column(DateTime, nullable=False)
+    booking_status = Column(String(32), nullable=False)
+    booking_version = Column(BigInteger, nullable=False)
+
+    conflict_type = Column(String(32), nullable=False, default="booking")
+    conflict_window_start = Column(DateTime, nullable=False)
+    conflict_window_end = Column(DateTime, nullable=False)
+
+    resolution = Column(String(32), nullable=False, default="pending")
+    resolved_by_id = Column(String(64), nullable=True)
+    resolved_by_name = Column(String(128), nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution_reason = Column(Text, nullable=True)
+    reschedule_suggestion = Column(Text, nullable=True)
+
+    plan_version_at_snapshot = Column(BigInteger, nullable=False, default=1)
+
+    rule_version = Column(String(32), nullable=False, default="v1.0.0")
+    created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
+    updated_at = Column(DateTime, nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("ix_deact_conflict_plan_booking", "plan_id", "booking_id"),
+        Index("ix_deact_conflict_resolution", "plan_id", "resolution"),
+    )
+
+
+class DeactivationActionLog(Base):
+    __tablename__ = "deactivation_action_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    log_id = Column(String(128), nullable=False, unique=True, index=True)
+    plan_id = Column(String(128), nullable=False, index=True)
+
+    action = Column(String(64), nullable=False)
+    old_status = Column(String(32), nullable=True)
+    new_status = Column(String(32), nullable=True)
+    details = Column(Text, nullable=True)
+
+    booking_id = Column(String(128), nullable=True, index=True)
+    actor_id = Column(String(64), nullable=True)
+    actor_name = Column(String(128), nullable=True)
+    actor_role = Column(String(32), nullable=True)
+    rule_version = Column(String(32), nullable=False, default="v1.0.0")
+    created_at = Column(DateTime, nullable=False, default=now_utc, index=True)
+
+
 def get_db():
     db = SessionLocal()
     try:

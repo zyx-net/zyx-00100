@@ -71,6 +71,30 @@ class BulkImportPrecheckStatus(str, Enum):
     WARNING = "warning"
 
 
+class DeactivationPlanStatus(str, Enum):
+    DRAFT = "draft"
+    PRECHECKED = "prechecked"
+    CONFIRMED = "confirmed"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    REVOKED = "revoked"
+    CANCELLED = "cancelled"
+
+
+class DeactivationRecurrenceType(str, Enum):
+    ONCE = "once"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+
+
+class ConflictResolutionAction(str, Enum):
+    CANCEL = "cancel"
+    RESCHEDULE = "reschedule"
+    SKIP = "skip"
+    PENDING = "pending"
+
+
 class EventType(str, Enum):
     BOOKING_CREATED = "booking_created"
     BOOKING_APPROVED = "booking_approved"
@@ -112,6 +136,8 @@ class Permission(str, Enum):
     BULK_IMPORT_CONFIRM = "bulk_import_confirm"
     BULK_IMPORT_CANCEL = "bulk_import_cancel"
     BULK_IMPORT_VIEW_ALL = "bulk_import_view_all"
+    MANAGE_DEACTIVATION = "manage_deactivation"
+    VIEW_DEACTIVATION = "view_deactivation"
 
 
 ROLE_PERMISSIONS = {
@@ -124,6 +150,7 @@ ROLE_PERMISSIONS = {
         Permission.RESCHEDULE_BOOKING,
         Permission.SUBMIT_WAITLIST,
         Permission.BULK_IMPORT_DRAFT,
+        Permission.VIEW_DEACTIVATION,
     },
     UserRole.TEAM_ADMIN: {
         Permission.CREATE_BOOKING,
@@ -143,6 +170,7 @@ ROLE_PERMISSIONS = {
         Permission.BULK_IMPORT_DRAFT,
         Permission.BULK_IMPORT_CONFIRM,
         Permission.BULK_IMPORT_CANCEL,
+        Permission.VIEW_DEACTIVATION,
     },
     UserRole.RECEPTIONIST: {
         Permission.CREATE_BOOKING,
@@ -163,6 +191,8 @@ ROLE_PERMISSIONS = {
         Permission.BULK_IMPORT_CONFIRM,
         Permission.BULK_IMPORT_CANCEL,
         Permission.BULK_IMPORT_VIEW_ALL,
+        Permission.MANAGE_DEACTIVATION,
+        Permission.VIEW_DEACTIVATION,
     },
     UserRole.SYSTEM_ADMIN: {
         Permission.CREATE_BOOKING,
@@ -185,6 +215,8 @@ ROLE_PERMISSIONS = {
         Permission.BULK_IMPORT_CONFIRM,
         Permission.BULK_IMPORT_CANCEL,
         Permission.BULK_IMPORT_VIEW_ALL,
+        Permission.MANAGE_DEACTIVATION,
+        Permission.VIEW_DEACTIVATION,
     },
 }
 

@@ -36,6 +36,12 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _ensure_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is not None:
+        return dt.replace(tzinfo=None)
+    return dt
+
+
 def _generate_id() -> str:
     return f"bk-{uuid.uuid4().hex[:12]}"
 
@@ -380,7 +386,7 @@ class CommandHandler:
                               f"当前状态 {agg.status.value} 不允许取消")
 
         if agg.start_time:
-            minutes_to_start = (agg.start_time - now_utc()).total_seconds() / 60
+            minutes_to_start = (_ensure_naive(agg.start_time) - _ensure_naive(now_utc())).total_seconds() / 60
             if minutes_to_start < settings.default_cancel_before_minutes and actor_role == UserRole.MEMBER:
                 if agg.owner_id != actor_id:
                     pass

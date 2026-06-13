@@ -1,0 +1,66 @@
+{
+  "create_booking": {
+    "status": 200,
+    "booking_id": "bk-f43b96af3ed4",
+    "booking_status": "approved"
+  },
+  "create_plan": {
+    "status": 200,
+    "plan_id": "dact-78ed82c607ef",
+    "version": 1,
+    "status_text": "draft"
+  },
+  "member_create_denied": {
+    "status": 403,
+    "error_code": "PERMISSION_DENIED"
+  },
+  "reschedule_request": {
+    "status": 409,
+    "request_id": null,
+    "request_status": null
+  },
+  "waitlist": {
+    "status": 200,
+    "waitlist_id": "wl-6f7ab399af51",
+    "waitlist_status": "waiting"
+  },
+  "bulk_upload": {
+    "status": 200,
+    "batch_id": "batch-3cd4b18e6278",
+    "batch_status": "draft"
+  },
+  "precheck": {
+    "status": 200,
+    "booking_conflicts": 1,
+    "reschedule_request_conflicts": 0,
+    "waitlist_conflicts": 1,
+    "bulk_import_conflicts": 1
+  },
+  "confirm": {
+    "status": 200,
+    "plan_status": "processing",
+    "total_conflicts": 1
+  },
+  "booking_after_confirm": {
+    "status": 200,
+    "booking_status": null,
+    "version": null
+  },
+  "conflicts_list": {
+    "status": 200,
+    "total": 1,
+    "first_resolution": "pending"
+  },
+  "logs": {
+    "status": 200,
+    "actions": [
+      "CREATE",
+      "PRECHECK",
+      "CONFIRM"
+    ]
+  },
+  "export_json": {
+    "status": 200,
+    "row_count": 1
+  }
+}

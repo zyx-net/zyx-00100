@@ -424,3 +424,167 @@ class BulkImportOperationLogResponse(BaseModel):
     actor_role: Optional[str] = None
     created_at: Optional[datetime] = None
     rule_version: str
+
+
+# ---------- 会议室停用计划 ----------
+
+class CreateDeactivationPlanRequest(BaseModel):
+    room_id: str
+    reason: str
+    impact_scope: Optional[str] = None
+    allow_auto_reschedule: bool = False
+    recurrence_type: str = Field(default="once", pattern="^(once|daily|weekly|monthly)$")
+    recurrence_rule: Optional[Dict[str, Any]] = None
+    window_start: datetime
+    window_end: datetime
+    until_date: Optional[datetime] = None
+
+
+class ModifyDeactivationPlanRequest(BaseModel):
+    reason: Optional[str] = None
+    impact_scope: Optional[str] = None
+    allow_auto_reschedule: Optional[bool] = None
+    recurrence_type: Optional[str] = Field(default=None, pattern="^(once|daily|weekly|monthly)$")
+    recurrence_rule: Optional[Dict[str, Any]] = None
+    window_start: Optional[datetime] = None
+    window_end: Optional[datetime] = None
+    until_date: Optional[datetime] = None
+    expected_version: int
+
+
+class DeactivationPlanResponse(BaseModel):
+    plan_id: str
+    room_id: str
+    reason: str
+    impact_scope: Optional[str] = None
+    allow_auto_reschedule: bool = False
+    recurrence_type: str
+    recurrence_rule: Optional[Dict[str, Any]] = None
+    window_start: Optional[datetime] = None
+    window_end: Optional[datetime] = None
+    until_date: Optional[datetime] = None
+    status: str
+    version: int
+    creator_id: str
+    creator_name: str
+    creator_role: str
+    precheck_at: Optional[datetime] = None
+    confirmed_at: Optional[datetime] = None
+    processing_started_at: Optional[datetime] = None
+    processed_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+    revoker_id: Optional[str] = None
+    revoker_name: Optional[str] = None
+    expanded_windows: Optional[List[Dict[str, Any]]] = None
+    total_conflicts: int = 0
+    resolved_conflicts: int = 0
+    pending_conflicts: int = 0
+    rule_version: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class DeactivationPlanListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    rule_version: str
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ConflictSnapshotResponse(BaseModel):
+    snapshot_id: str
+    plan_id: str
+    booking_id: str
+    booking_room_id: str
+    booking_owner_id: str
+    booking_owner_name: Optional[str] = None
+    booking_title: Optional[str] = None
+    booking_start_time: Optional[datetime] = None
+    booking_end_time: Optional[datetime] = None
+    booking_status: str
+    booking_version: int
+    conflict_type: str
+    conflict_window_start: Optional[datetime] = None
+    conflict_window_end: Optional[datetime] = None
+    resolution: str
+    resolved_by_id: Optional[str] = None
+    resolved_by_name: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+    resolution_reason: Optional[str] = None
+    reschedule_suggestion: Optional[Dict[str, Any]] = None
+    rule_version: str
+    created_at: Optional[datetime] = None
+
+
+class ConflictListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    rule_version: str
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class BatchResolveConflictsRequest(BaseModel):
+    resolutions: List[Dict[str, Any]] = Field(..., description="每项含 booking_id, action(cancel/reschedule/skip), reason, suggested_start/end(改期时)")
+
+
+class BatchResolveResponse(BaseModel):
+    success: bool = True
+    plan_id: str
+    total: int = 0
+    resolved: int = 0
+    skipped: int = 0
+    failed: int = 0
+    results: List[Dict[str, Any]] = Field(default_factory=list)
+    rule_version: str
+
+
+class RevokeDeactivationPlanRequest(BaseModel):
+    reason: Optional[str] = None
+    expected_version: int
+
+
+class DeactivationActionLogResponse(BaseModel):
+    log_id: str
+    plan_id: str
+    action: str
+    old_status: Optional[str] = None
+    new_status: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+    booking_id: Optional[str] = None
+    actor_id: Optional[str] = None
+    actor_name: Optional[str] = None
+    actor_role: Optional[str] = None
+    created_at: Optional[datetime] = None
+    rule_version: str
+
+
+class DeactivationPrecheckResponse(BaseModel):
+    success: bool = True
+    plan_id: str
+    conflict_count: int = 0
+    booking_conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    reschedule_request_conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    waitlist_conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    bulk_import_conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    expanded_windows: List[Dict[str, Any]] = Field(default_factory=list)
+    rule_version: str
+
+
+class ConfirmDeactivationResponse(BaseModel):
+    success: bool = True
+    plan_id: str
+    status: str
+    total_conflicts: int = 0
+    rule_version: str
+
+
+class AffectedExportResponse(BaseModel):
+    rule_version: str
+    format: str
+    plan_id: str
+    row_count: int
+    content: Optional[str] = None
+    items: Optional[List[Dict[str, Any]]] = None
+    header: Optional[List[str]] = None

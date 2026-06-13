@@ -49,6 +49,12 @@ def on_startup():
         expired = wl_svc.expire_stale_waitlists()
         if expired > 0:
             logger.info(f"启动清理: 已将 {expired} 个超时未确认的候补标记为过期")
+
+        from .services.deactivation_service import DeactivationService
+        dact_svc = DeactivationService(db)
+        recovered = dact_svc.recover_incomplete_plans()
+        if recovered > 0:
+            logger.info(f"启动恢复: 已恢复 {recovered} 个中断处理的停用计划")
     finally:
         db.close()
     logger.info(f"会议室预订系统启动完成，规则版本: {settings.rule_version}")

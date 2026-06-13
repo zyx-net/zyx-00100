@@ -21,6 +21,7 @@ from ..services.arbitration import ArbitrationService
 from ..services.reschedule_service import RescheduleApprovalService
 from ..services.waitlist_service import WaitlistService
 from ..services.bulk_import_service import BulkImportService
+from ..services.deactivation_service import DeactivationService
 from ..models import schemas as S
 
 router = APIRouter(prefix="/api/v1", tags=["会议室预订"])
@@ -858,6 +859,247 @@ def bulk_import_logs(
         "rule_version": settings.rule_version,
         "items": result["items"],
     }
+
+
+# ---------- 会议室停用计划接口 ----------
+
+@router.post("/deactivation-plans", response_model=S.DeactivationPlanResponse)
+def create_deactivation_plan(
+    req: S.CreateDeactivationPlanRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.create_plan(
+            room_id=req.room_id,
+            reason=req.reason,
+            impact_scope=req.impact_scope,
+            allow_auto_reschedule=req.allow_auto_reschedule,
+            recurrence_type=req.recurrence_type,
+            recurrence_rule=req.recurrence_rule,
+            window_start=req.window_start,
+            window_end=req.window_end,
+            until_date=req.until_date,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+        )
+    except DomainError as e:
+        return _error_resp(e, 409 if e.code in ("OVERLAPPING_PLAN", "VERSION_CONFLICT") else 403 if e.code == "PERMISSION_DENIED" else 400)
+    return result
+
+
+@router.put("/deactivation-plans/{plan_id}", response_model=S.DeactivationPlanResponse)
+def modify_deactivation_plan(
+    plan_id: str,
+    req: S.ModifyDeactivationPlanRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.modify_plan(
+            plan_id=plan_id,
+            reason=req.reason,
+            impact_scope=req.impact_scope,
+            allow_auto_reschedule=req.allow_auto_reschedule,
+            recurrence_type=req.recurrence_type,
+            recurrence_rule=req.recurrence_rule,
+            window_start=req.window_start,
+            window_end=req.window_end,
+            until_date=req.until_date,
+            expected_version=req.expected_version,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+        )
+    except DomainError as e:
+        return _error_resp(e, 409 if e.code in ("VERSION_CONFLICT", "OVERLAPPING_PLAN") else 403 if e.code == "PERMISSION_DENIED" else 404 if e.code == "PLAN_NOT_FOUND" else 400)
+    return result
+
+
+@router.post("/deactivation-plans/{plan_id}/precheck", response_model=S.DeactivationPrecheckResponse)
+def precheck_deactivation_plan(
+    plan_id: str,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.precheck_plan(
+            plan_id=plan_id,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+        )
+    except DomainError as e:
+        return _error_resp(e, 403 if e.code == "PERMISSION_DENIED" else 404 if e.code == "PLAN_NOT_FOUND" else 400)
+    return result
+
+
+@router.post("/deactivation-plans/{plan_id}/confirm", response_model=S.ConfirmDeactivationResponse)
+def confirm_deactivation_plan(
+    plan_id: str,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.confirm_plan(
+            plan_id=plan_id,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+        )
+    except DomainError as e:
+        return _error_resp(e, 403 if e.code == "PERMISSION_DENIED" else 404 if e.code == "PLAN_NOT_FOUND" else 400)
+    return result
+
+
+@router.post("/deactivation-plans/{plan_id}/resolve", response_model=S.BatchResolveResponse)
+def batch_resolve_conflicts(
+    plan_id: str,
+    req: S.BatchResolveConflictsRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.batch_resolve(
+            plan_id=plan_id,
+            resolutions=req.resolutions,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+        )
+    except DomainError as e:
+        return _error_resp(e, 403 if e.code == "PERMISSION_DENIED" else 404 if e.code == "PLAN_NOT_FOUND" else 400)
+    return result
+
+
+@router.post("/deactivation-plans/{plan_id}/revoke", response_model=S.DeactivationPlanResponse)
+def revoke_deactivation_plan(
+    plan_id: str,
+    req: S.RevokeDeactivationPlanRequest,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.revoke_plan(
+            plan_id=plan_id,
+            reason=req.reason,
+            expected_version=req.expected_version,
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            actor_name=actor["actor_name"],
+        )
+    except DomainError as e:
+        return _error_resp(e, 409 if e.code == "VERSION_CONFLICT" else 403 if e.code == "PERMISSION_DENIED" else 404 if e.code == "PLAN_NOT_FOUND" else 400)
+    return result
+
+
+@router.get("/deactivation-plans/{plan_id}", response_model=S.DeactivationPlanResponse)
+def get_deactivation_plan(
+    plan_id: str,
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.get_plan(plan_id, actor["actor_id"], actor["actor_role"])
+    except DomainError as e:
+        return _error_resp(e, 403 if e.code == "PERMISSION_DENIED" else 404)
+    return result
+
+
+@router.get("/deactivation-plans", response_model=S.DeactivationPlanListResponse)
+def list_deactivation_plans(
+    room_id: Optional[str] = Query(None, description="房间ID过滤"),
+    status: Optional[str] = Query(None, description="状态过滤，逗号分隔"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        return svc.list_plans(
+            actor_id=actor["actor_id"],
+            actor_role=actor["actor_role"],
+            room_id=room_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+    except DomainError as e:
+        return _error_resp(e, 403)
+
+
+@router.get("/deactivation-plans/{plan_id}/conflicts", response_model=S.ConflictListResponse)
+def list_deactivation_conflicts(
+    plan_id: str,
+    resolution: Optional[str] = Query(None, description="处理状态过滤"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        return svc.list_conflicts(
+            plan_id=plan_id,
+            resolution=resolution,
+            limit=limit,
+            offset=offset,
+        )
+    except DomainError as e:
+        return _error_resp(e, 404 if e.code == "PLAN_NOT_FOUND" else 400)
+
+
+@router.get("/deactivation-plans/{plan_id}/logs", response_model=S.EventQueryResponse)
+def list_deactivation_logs(
+    plan_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.list_logs(plan_id=plan_id, limit=limit, offset=offset)
+    except DomainError as e:
+        return _error_resp(e, 404 if e.code == "PLAN_NOT_FOUND" else 400)
+    return {
+        "total": result["total"],
+        "limit": result["limit"],
+        "offset": result["offset"],
+        "rule_version": settings.rule_version,
+        "items": result["items"],
+    }
+
+
+@router.get("/deactivation-plans/{plan_id}/export")
+def export_affected_bookings(
+    plan_id: str,
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    download: bool = Query(False),
+    actor: dict = Depends(_parse_actor),
+    db: Session = Depends(get_db),
+):
+    svc = DeactivationService(db)
+    try:
+        result = svc.export_affected(plan_id=plan_id, format=format)
+    except DomainError as e:
+        return _error_resp(e, 404 if e.code == "PLAN_NOT_FOUND" else 400)
+    if format == "csv" and download:
+        return PlainTextResponse(
+            content=result.get("content") or "",
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="deactivation_{plan_id}_affected.csv"'},
+        )
+    return result
 
 
 @router.get("/health")
